@@ -4,48 +4,58 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.*;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static findex.patterns.Lexer.ENG_WORD;
 
 public class SimpleFileIndexer implements FileIndexer<Collection<String>> {
-    private final String rootPath;
-    private final ThreadSafeIndexerCache threadSafeIndexerCache;
 
-    private final Pattern regexPattern;
-
-    public SimpleFileIndexer(Set<String> stopWords, String _rootPath, String lexer) {
-        rootPath = _rootPath;
-        regexPattern = lexer == null ? Pattern.compile(ENG_WORD) : Pattern.compile(lexer);
-        threadSafeIndexerCache = new ThreadSafeIndexerCache(stopWords);
+    private final String regexPattern;
+    private final IndexerCache cache;
+    private final ExecutorService executor;
+    public SimpleFileIndexer(ExecutorService executor, Set<String> stopWords,
+                             String regexPattern) {
+        this.regexPattern = regexPattern == null ? ENG_WORD :
+                Pattern.compile(regexPattern).pattern();
+        this.executor = executor;
+        this.cache = new ThreadSafeIndexerCache(stopWords);
     }
 
-    private void computeFile(File file) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(file));
-        for (String line = reader.readLine(); line != null; line = reader
-                .readLine()) {
-            for (String word : line.split(regexPattern.pattern())) {
-               threadSafeIndexerCache.addIfAbsent(word, file.getAbsolutePath());
+    @Override
+    public void compute(Queue<Callable<Path>> events) {
+        executor.submit(() -> {
+            while (true) {
+                final var event = events.poll();
+                if (event != null) {
+                    final var path = event.call();
+                    if (path != null) {
+                        final var file = path.toFile();
+                        if (file.isDirectory()) {
+                            computeFolder(file);
+                        } else {
+                            computeFile(file);
+                        }
+                    }
+                }
             }
-        }
+        });
     }
 
-    @Override
-    public void compute() {
-        computeFolder(new File(rootPath));
-    }
-
-    @Override
-    public void computeFolder(File folder) {
+    private void computeFolder(File folder) {
         if (folder == null) {
             return;
         }
         var list = folder.listFiles();
         if (list != null) {
             Stream.of(list)
-                    .parallel()
                     .forEach(file -> {
                         try {
                             if (file.isFile()) {
@@ -59,12 +69,24 @@ public class SimpleFileIndexer implements FileIndexer<Collection<String>> {
                     });
         }
     }
-    @Override
-    public Collection<String> search(Collection<String> words) {
-        Set<String> answer = new HashSet<>();
-        for (String word : words) {
-            answer.addAll(threadSafeIndexerCache.getFilePathsFor(word));
+
+    private void computeFile(File file) throws IOException {
+        BufferedReader reader = new BufferedReader(new FileReader(file));
+        for (String line = reader.readLine(); line != null; line = reader
+                .readLine()) {
+            for (String word : line.split(regexPattern)) {
+                cache.addIfAbsent(word, file.getAbsolutePath());
+            }
         }
-        return answer;
+    }
+
+    @Override
+    public Set<String> search(Collection<String> words) {
+        return words.stream()
+                .map(cache::getFilePathsFor)
+                .reduce(new HashSet<>(), (it, other) -> {
+                    it.addAll(other);
+                    return it;
+                });
     }
 }

@@ -2,17 +2,15 @@ package findex.indexer;
 
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class ThreadSafeIndexerCache implements IndexerCache{
-
-    private final ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>> index
+public class ThreadSafeIndexerCache implements IndexerCache {
+    protected final ConcurrentHashMap<String, HashSet<String>> index
             = new ConcurrentHashMap<>();
-    private final Set<String> stopWords;
+    protected final HashSet<String> stopWords;
 
-    ThreadSafeIndexerCache(Collection<String> words){
-        this.stopWords = new HashSet<>(words);
+    public ThreadSafeIndexerCache(Collection<String> stopWords) {
+        this.stopWords = new HashSet<>(stopWords);
     }
 
     @Override
@@ -22,14 +20,20 @@ public class ThreadSafeIndexerCache implements IndexerCache{
 
     @Override
     public void addIfAbsent(String word, String path) {
-        if (!isStopWord(word)){
-            var idx = index.computeIfAbsent(word, k -> new ConcurrentHashMap<>());
-            idx.put(path, true);
+        if(isStopWord(word)){
+            return;
         }
+        index.compute(word, (key, list) -> {
+            if (list == null) {
+                list = new HashSet<>();
+            }
+            list.add(path);
+            return list;
+        });
     }
 
     @Override
-    public Set<String> getFilePathsFor(String word) {
-        return index.get(word).keySet();
+    public HashSet<String> getFilePathsFor(String word) {
+        return index.get(word);
     }
 }
