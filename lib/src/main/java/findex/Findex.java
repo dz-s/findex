@@ -1,47 +1,42 @@
 package findex;
 
-import findex.indexer.AbstractFileIndexer;
+import findex.indexer.FileIndexer;
 import findex.indexer.SimpleIndexer;
 import findex.watchers.FileWatcher;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+import java.util.function.Function;
 
 
 public class Findex {
-    private final AbstractFileIndexer fileIndexer;
+    private final FileIndexer fileIndexer;
 
     private final FileWatcher fileWatcher;
 
-    Findex(Set<String> _stopWords, String rootPath) throws IOException {
-        fileIndexer = new SimpleIndexer(_stopWords, rootPath);
-        fileWatcher = new FileWatcher(fileIndexer, Path.of(rootPath), true);
+    private final ExecutorService executor;
+    private final Path rootPath;
+
+    Findex(Set<String> stopWords, String rootPath) throws IOException {
+        executor = Executors.newCachedThreadPool();
+        this.rootPath = Path.of(rootPath);
+        fileIndexer = new SimpleIndexer(executor, stopWords);
+        fileWatcher = new FileWatcher(executor, this.rootPath, true);
     }
 
-    public void compute() {
-        try {
-            ExecutorService service = Executors.newSingleThreadExecutor();
-            try (Closeable close = service::shutdown) {
-                try {
-                    fileWatcher.processEvents();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-            fileIndexer.compute();
-        } catch (IOException e){
-            throw new RuntimeException(e);
-        }
+    public void compute() throws InterruptedException {
+        final var eventsQueue = new SynchronousQueue<Callable<Path>>();
+        executor.submit(() -> fileWatcher.addEvents(eventsQueue));
+        eventsQueue.offer(() -> rootPath);
+        executor.submit(() -> fileIndexer.compute(eventsQueue));
 
+        executor.awaitTermination(5, TimeUnit.MINUTES);
     }
 
     public Collection<String> search(Collection<String> words){
         return fileIndexer.search(words);
     }
-
 }
