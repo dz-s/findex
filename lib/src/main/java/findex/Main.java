@@ -12,7 +12,7 @@ public class Main {
         String rootPath = "rootPath";
 
         var fileIndexer = new Findex(Collections.emptySet(),
-                rootPath);
+                rootPath, null);
         fileIndexer.compute();
 
         Scanner scanner = new Scanner(System.in);

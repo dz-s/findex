@@ -1,7 +1,7 @@
 package findex;
 
-import findex.indexer.AbstractFileIndexer;
-import findex.indexer.SimpleIndexer;
+import findex.indexer.FileIndexer;
+import findex.indexer.SimpleFileIndexer;
 import findex.watchers.FileWatcher;
 
 import java.io.Closeable;
@@ -12,14 +12,13 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-
 public class Findex {
-    private final AbstractFileIndexer fileIndexer;
+    private final FileIndexer fileIndexer;
 
     private final FileWatcher fileWatcher;
 
-    Findex(Set<String> _stopWords, String rootPath) throws IOException {
-        fileIndexer = new SimpleIndexer(_stopWords, rootPath);
+    Findex(Set<String> stopWords, String rootPath, String lexer) throws IOException {
+        fileIndexer = new SimpleFileIndexer(stopWords, rootPath, lexer);
         fileWatcher = new FileWatcher(fileIndexer, Path.of(rootPath), true);
     }
 
@@ -27,11 +26,13 @@ public class Findex {
         try {
             ExecutorService service = Executors.newSingleThreadExecutor();
             try (Closeable close = service::shutdown) {
-                try {
-                    fileWatcher.processEvents();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                service.submit(() -> {
+                    try {
+                        fileWatcher.processEvents();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
             }
             fileIndexer.compute();
         } catch (IOException e){

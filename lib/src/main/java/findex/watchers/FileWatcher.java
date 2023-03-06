@@ -1,6 +1,6 @@
 package findex.watchers;
 
-import findex.indexer.AbstractFileIndexer;
+import findex.indexer.FileIndexer;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -18,9 +18,9 @@ public class FileWatcher {
     private final boolean recursive;
     private final boolean trace;
 
-    private AbstractFileIndexer fileIndexer;
+    private FileIndexer fileIndexer;
 
-    public FileWatcher(AbstractFileIndexer fileIndexer, Path dir, boolean recursive) throws IOException {
+    public FileWatcher(FileIndexer fileIndexer, Path dir, boolean recursive) throws IOException {
         if (fileIndexer != null){
             this.fileIndexer = fileIndexer;
         }
