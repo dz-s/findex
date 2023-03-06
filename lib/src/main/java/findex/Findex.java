@@ -21,12 +21,13 @@ public class Findex {
         executor = Executors.newCachedThreadPool();
         this.rootPath = Path.of(rootPath);
         fileIndexer = new SimpleFileIndexer(executor, stopWords, null);
+        //Watch directory changes to process on fly
         fileWatcher = new FileWatcher(this.rootPath, true);
     }
 
-    public void compute() throws InterruptedException {
+    public void compute() {
         final var eventsQueue = new LinkedBlockingQueue<Callable<Path>>();
-        executor.submit(() -> fileWatcher.addEvents(eventsQueue));
+        executor.submit(() -> fileWatcher.setWatcher(eventsQueue));
         eventsQueue.offer(() -> rootPath);
         executor.submit(() -> fileIndexer.compute(eventsQueue));
     }

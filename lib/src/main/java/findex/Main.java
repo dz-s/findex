@@ -9,7 +9,7 @@ public class Main {
     public static void main(String[] args) throws IOException, InterruptedException {
         System.out.println("Starting the file counter program");
 
-        String rootPath = "/Users/shulhd/IdeaProjects/findex/lib/src/main/resources/n-works";
+        String rootPath = "/Users/dima.shulhin/IdeaProjects/findex/lib/src/main/resources/n-works";
 
         var fileIndexer = new Findex(Collections.emptySet(),
                 rootPath);

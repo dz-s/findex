@@ -67,7 +67,7 @@ public class FileWatcher {
         });
     }
 
-    public void addEvents(Queue<Callable<Path>> eventsQueue) {
+    public void setWatcher(Queue<Callable<Path>> eventsQueue) {
         while (keys.size() > 0) {
             try {
                 final var key = watcher.take();
