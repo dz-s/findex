@@ -6,13 +6,12 @@ import java.util.Scanner;
 import java.util.Set;
 
 public class Main {
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         System.out.println("Starting the file counter program");
 
         String rootPath = "rootPath";
 
-        var fileIndexer = new Findex(Collections.emptySet(),
-                rootPath);
+        var fileIndexer = new Findex(Collections.emptySet(), rootPath);
         fileIndexer.compute();
 
         Scanner scanner = new Scanner(System.in);

@@ -4,32 +4,46 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.ConcurrentSkipListSet;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Stream;
 
-public class SimpleIndexer extends AbstractFileIndexer {
+public class SimpleIndexer implements FileIndexer<Collection<String>> {
 
-    public SimpleIndexer(Set<String> stopWords, String rootPath) {
-        super(stopWords, rootPath);
-    }
-
-    private void computeFile(File file) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(file));
-        for (String line = reader.readLine(); line != null; line = reader
-                .readLine()) {
-            for (String word : line.split("\\W+")) {
-                if (stopWords.contains(word))
-                    continue;
-                ConcurrentSkipListSet<String> idx =
-                        index.computeIfAbsent(word, k -> new ConcurrentSkipListSet<>());
-                idx.add(file.getAbsolutePath());
-            }
-        }
+    private final IndexerCache cache;
+    private final ExecutorService executor;
+    public SimpleIndexer(ExecutorService executor, Set<String> stopWords) {
+        this.executor = executor;
+        this.cache = new ThreadSafeIndexerCache(stopWords);
     }
 
     @Override
-    public void computeFolder(File folder) {
+    public void compute(Queue<Callable<Path>> events) {
+        executor.submit(() -> {
+            while (true) {
+                final var event = events.poll();
+                if (event != null) {
+                    final var path = event.call();
+                    if (path != null) {
+                        final var file = path.toFile();
+                        if (file.isDirectory()) {
+                            computeFolder(file);
+                        } else {
+                            computeFile(file);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    private void computeFolder(File folder) {
         if (folder == null) {
             return;
         }
@@ -50,17 +64,24 @@ public class SimpleIndexer extends AbstractFileIndexer {
         }
     }
 
-    @Override
-    public void compute() {
-        computeFolder(new File(rootPath));
+    private void computeFile(File file) throws IOException {
+        BufferedReader reader = new BufferedReader(new FileReader(file));
+        for (String line = reader.readLine(); line != null; line = reader
+                .readLine()) {
+            for (String word : line.split("\\W+")) {
+                if (cache.isStopWord(word)) continue;
+                cache.addIfAbsent(word, file.getAbsolutePath());
+            }
+        }
     }
 
     @Override
-    public Collection<String> search(Collection<String> words) {
-        Set<String> answer = new HashSet<>();
-        for (String word : words) {
-            answer.addAll(index.get(word));
-        }
-        return answer;
+    public HashSet<String> search(Collection<String> words) {
+        return words.stream()
+            .map(cache::getFilePathsFor)
+            .reduce(new HashSet<>(), (it, other) -> {
+                it.addAll(other);
+                return it;
+            });
     }
 }
